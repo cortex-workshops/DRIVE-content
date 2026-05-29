@@ -1,0 +1,206 @@
+name: DRIVE - Cloud Spend & AI Token Cost Metrics
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (print payloads without submitting)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  CORTEX_API_URL: https://api.getcortexapp.com
+
+jobs:
+  submit-cloud-spend-metrics:
+    name: Submit Cloud Spend - ${{ matrix.service.tag }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - tag: auth-service
+            budget: 4000
+          - tag: checkout-service
+            budget: 7500
+          - tag: inventory-service
+            budget: 5000
+          - tag: notifications-service
+            budget: 2500
+          - tag: payments-service
+            budget: 9000
+          - tag: profile-service
+            budget: 3500
+      fail-fast: false
+
+    steps:
+      - name: Generate Cloud Spend Data
+        id: spend_data
+        run: |
+          # Simulate MTD spend as 60–130% of monthly budget, scaled to day-of-month
+          DAY_OF_MONTH=$(date +%-d)
+          DAYS_IN_MONTH=$(date -d "$(date +%Y-%m-01) +1 month -1 day" +%-d)
+          BUDGET=${{ matrix.service.budget }}
+
+          # Random full-month spend between 60% and 130% of budget
+          FULL_MONTH_PCT=$(echo "scale=4; ($(( RANDOM % 70 + 60 )) ) / 100" | bc)
+          FULL_MONTH_SPEND=$(echo "scale=2; $BUDGET * $FULL_MONTH_PCT" | bc)
+
+          # Prorate to current day of month
+          ACTUAL=$(echo "scale=2; $FULL_MONTH_SPEND * $DAY_OF_MONTH / $DAYS_IN_MONTH" | bc)
+          VARIANCE=$(echo "scale=2; $ACTUAL - $BUDGET" | bc)
+          UTILIZATION=$(echo "scale=4; $ACTUAL / $BUDGET" | bc)
+          UTILIZATION=$(echo $UTILIZATION | sed 's/^\./0./')
+          ACTUAL=$(echo $ACTUAL | sed 's/^\./0./')
+
+          echo "actual=$ACTUAL"           >> $GITHUB_OUTPUT
+          echo "budget=$BUDGET"           >> $GITHUB_OUTPUT
+          echo "variance=$VARIANCE"       >> $GITHUB_OUTPUT
+          echo "utilization=$UTILIZATION" >> $GITHUB_OUTPUT
+
+          echo "service=${{ matrix.service.tag }}  actual=\$$ACTUAL  budget=\$$BUDGET  variance=\$$VARIANCE  utilization=$UTILIZATION"
+
+      - name: Submit drive-cost-cloud-spend-mtd
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          curl -sf -X POST \
+            "${{ env.CORTEX_API_URL }}/api/v1/eng-intel/custom-metrics/drive-cost-cloud-spend-mtd/entity/${{ matrix.service.tag }}" \
+            -H "Authorization: Bearer ${{ secrets.CORTEX_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"value\":${{ steps.spend_data.outputs.actual }}}"
+          echo "✅ drive-cost-cloud-spend-mtd => ${{ steps.spend_data.outputs.actual }}"
+
+      - name: Submit drive-cost-cloud-budget
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          curl -sf -X POST \
+            "${{ env.CORTEX_API_URL }}/api/v1/eng-intel/custom-metrics/drive-cost-cloud-budget/entity/${{ matrix.service.tag }}" \
+            -H "Authorization: Bearer ${{ secrets.CORTEX_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"value\":${{ steps.spend_data.outputs.budget }}}"
+          echo "✅ drive-cost-cloud-budget => ${{ steps.spend_data.outputs.budget }}"
+
+      - name: Submit drive-cost-cloud-variance
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          curl -sf -X POST \
+            "${{ env.CORTEX_API_URL }}/api/v1/eng-intel/custom-metrics/drive-cost-cloud-variance/entity/${{ matrix.service.tag }}" \
+            -H "Authorization: Bearer ${{ secrets.CORTEX_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"value\":${{ steps.spend_data.outputs.variance }}}"
+          echo "✅ drive-cost-cloud-variance => ${{ steps.spend_data.outputs.variance }}"
+
+      - name: Submit drive-cost-cloud-utilization
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          curl -sf -X POST \
+            "${{ env.CORTEX_API_URL }}/api/v1/eng-intel/custom-metrics/drive-cost-cloud-utilization/entity/${{ matrix.service.tag }}" \
+            -H "Authorization: Bearer ${{ secrets.CORTEX_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"value\":${{ steps.spend_data.outputs.utilization }}}"
+          echo "✅ drive-cost-cloud-utilization => ${{ steps.spend_data.outputs.utilization }}"
+
+      - name: Dry Run Output
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: |
+          echo "=== DRY RUN: ${{ matrix.service.tag }} ==="
+          echo "drive-cost-cloud-spend-mtd  = ${{ steps.spend_data.outputs.actual }}"
+          echo "drive-cost-cloud-budget     = ${{ steps.spend_data.outputs.budget }}"
+          echo "drive-cost-cloud-variance   = ${{ steps.spend_data.outputs.variance }}"
+          echo "drive-cost-cloud-utilization= ${{ steps.spend_data.outputs.utilization }}"
+
+  submit-ai-token-metrics:
+    name: Submit AI Token Costs - ${{ matrix.service.tag }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - tag: auth-service
+            ai_budget: 150
+          - tag: checkout-service
+            ai_budget: 300
+          - tag: inventory-service
+            ai_budget: 200
+          - tag: notifications-service
+            ai_budget: 100
+          - tag: payments-service
+            ai_budget: 400
+          - tag: profile-service
+            ai_budget: 175
+      fail-fast: false
+
+    steps:
+      - name: Generate AI Token Data
+        id: ai_data
+        run: |
+          DAY_OF_MONTH=$(date +%-d)
+          DAYS_IN_MONTH=$(date -d "$(date +%Y-%m-01) +1 month -1 day" +%-d)
+          AI_BUDGET=${{ matrix.service.ai_budget }}
+
+          # Randomize full-month token volumes, then prorate to today
+          FULL_INPUT=$(( RANDOM * RANDOM % 4000000 + 500000 ))
+          FULL_OUTPUT=$(( RANDOM * RANDOM % 800000 + 100000 ))
+          INPUT_TOKENS=$(echo "scale=0; $FULL_INPUT * $DAY_OF_MONTH / $DAYS_IN_MONTH" | bc)
+          OUTPUT_TOKENS=$(echo "scale=0; $FULL_OUTPUT * $DAY_OF_MONTH / $DAYS_IN_MONTH" | bc)
+
+          # Approx cost: claude-sonnet-4 rates ($3/1M input, $15/1M output)
+          AI_COST=$(echo "scale=2; ($INPUT_TOKENS * 3 + $OUTPUT_TOKENS * 15) / 1000000" | bc)
+          AI_COST=$(echo $AI_COST | sed 's/^\./0./')
+
+          echo "input_tokens=$INPUT_TOKENS"   >> $GITHUB_OUTPUT
+          echo "output_tokens=$OUTPUT_TOKENS" >> $GITHUB_OUTPUT
+          echo "cost=$AI_COST"                >> $GITHUB_OUTPUT
+          echo "budget=$AI_BUDGET"            >> $GITHUB_OUTPUT
+
+          echo "service=${{ matrix.service.tag }}  input=$INPUT_TOKENS  output=$OUTPUT_TOKENS  cost=\$$AI_COST  budget=\$$AI_BUDGET"
+
+      - name: Submit drive-cost-ai-input-tokens
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          curl -sf -X POST \
+            "${{ env.CORTEX_API_URL }}/api/v1/eng-intel/custom-metrics/drive-cost-ai-input-tokens/entity/${{ matrix.service.tag }}" \
+            -H "Authorization: Bearer ${{ secrets.CORTEX_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"value\":${{ steps.ai_data.outputs.input_tokens }}}"
+          echo "✅ drive-cost-ai-input-tokens => ${{ steps.ai_data.outputs.input_tokens }}"
+
+      - name: Submit drive-cost-ai-output-tokens
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          curl -sf -X POST \
+            "${{ env.CORTEX_API_URL }}/api/v1/eng-intel/custom-metrics/drive-cost-ai-output-tokens/entity/${{ matrix.service.tag }}" \
+            -H "Authorization: Bearer ${{ secrets.CORTEX_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"value\":${{ steps.ai_data.outputs.output_tokens }}}"
+          echo "✅ drive-cost-ai-output-tokens => ${{ steps.ai_data.outputs.output_tokens }}"
+
+      - name: Submit drive-cost-ai-spend-mtd
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          curl -sf -X POST \
+            "${{ env.CORTEX_API_URL }}/api/v1/eng-intel/custom-metrics/drive-cost-ai-spend-mtd/entity/${{ matrix.service.tag }}" \
+            -H "Authorization: Bearer ${{ secrets.CORTEX_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"value\":${{ steps.ai_data.outputs.cost }}}"
+          echo "✅ drive-cost-ai-spend-mtd => ${{ steps.ai_data.outputs.cost }}"
+
+      - name: Submit drive-cost-ai-budget
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          curl -sf -X POST \
+            "${{ env.CORTEX_API_URL }}/api/v1/eng-intel/custom-metrics/drive-cost-ai-budget/entity/${{ matrix.service.tag }}" \
+            -H "Authorization: Bearer ${{ secrets.CORTEX_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"value\":${{ steps.ai_data.outputs.budget }}}"
+          echo "✅ drive-cost-ai-budget => ${{ steps.ai_data.outputs.budget }}"
+
+      - name: Dry Run Output
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: |
+          echo "=== DRY RUN: ${{ matrix.service.tag }} ==="
+          echo "drive-cost-ai-input-tokens = ${{ steps.ai_data.outputs.input_tokens }}"
+          echo "drive-cost-ai-output-tokens= ${{ steps.ai_data.outputs.output_tokens }}"
+          echo "drive-cost-ai-spend-mtd    = ${{ steps.ai_data.outputs.cost }}"
+          echo "drive-cost-ai-budget       = ${{ steps.ai_data.outputs.budget }}"
