@@ -1,0 +1,83 @@
+name: DRIVE - SLO Pass/Fail Metrics
+
+on:
+  schedule:
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (print payloads without submitting)'
+        required: false
+        default: 'false'
+        type: boolean
+
+env:
+  CORTEX_API_URL: https://api.getcortexapp.com
+
+jobs:
+  submit-slo-metrics:
+    name: Submit SLO Metrics - ${{ matrix.service.tag }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - tag: auth-service
+          - tag: checkout-service
+          - tag: inventory-service
+          - tag: notifications-service
+          - tag: payments-service
+          - tag: profile-service
+      fail-fast: false
+
+    steps:
+      - name: Generate SLO Data
+        id: slo_data
+        run: |
+          SLO_PASS_COUNT=$(( RANDOM % 8 + 2 ))
+          SLO_FAIL_COUNT=$(( RANDOM % 3 ))
+          SLO_TOTAL=$(( SLO_PASS_COUNT + SLO_FAIL_COUNT ))
+          SLO_PASS_RATE=$(echo "scale=4; $SLO_PASS_COUNT / $SLO_TOTAL" | bc)
+
+          echo "pass_count=$SLO_PASS_COUNT"   >> $GITHUB_OUTPUT
+          echo "fail_count=$SLO_FAIL_COUNT"   >> $GITHUB_OUTPUT
+          echo "pass_rate=$SLO_PASS_RATE"     >> $GITHUB_OUTPUT
+
+          echo "service=${{ matrix.service.tag }}  pass=$SLO_PASS_COUNT  fail=$SLO_FAIL_COUNT  rate=$SLO_PASS_RATE"
+
+      - name: Submit drive-slo-pass-count
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          curl -sf -X POST \
+            "${{ env.CORTEX_API_URL }}/api/v1/eng-intel/custom-metrics/drive-slo-pass-count/entity/${{ matrix.service.tag }}" \
+            -H "Authorization: Bearer ${{ secrets.CORTEX_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"value\":${{ steps.slo_data.outputs.pass_count }}}"
+          echo "✅ drive-slo-pass-count => ${{ steps.slo_data.outputs.pass_count }}"
+
+      - name: Submit drive-slo-fail-count
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          curl -sf -X POST \
+            "${{ env.CORTEX_API_URL }}/api/v1/eng-intel/custom-metrics/drive-slo-fail-count/entity/${{ matrix.service.tag }}" \
+            -H "Authorization: Bearer ${{ secrets.CORTEX_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"value\":${{ steps.slo_data.outputs.fail_count }}}"
+          echo "✅ drive-slo-fail-count => ${{ steps.slo_data.outputs.fail_count }}"
+
+      - name: Submit drive-slo-pass-rate
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          curl -sf -X POST \
+            "${{ env.CORTEX_API_URL }}/api/v1/eng-intel/custom-metrics/drive-slo-pass-rate/entity/${{ matrix.service.tag }}" \
+            -H "Authorization: Bearer ${{ secrets.CORTEX_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"value\":${{ steps.slo_data.outputs.pass_rate }}}"
+          echo "✅ drive-slo-pass-rate => ${{ steps.slo_data.outputs.pass_rate }}"
+
+      - name: Dry Run Output
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: |
+          echo "=== DRY RUN: ${{ matrix.service.tag }} ==="
+          echo "drive-slo-pass-count = ${{ steps.slo_data.outputs.pass_count }}"
+          echo "drive-slo-fail-count = ${{ steps.slo_data.outputs.fail_count }}"
+          echo "drive-slo-pass-rate  = ${{ steps.slo_data.outputs.pass_rate }}"
