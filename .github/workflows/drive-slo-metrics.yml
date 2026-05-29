@@ -47,7 +47,7 @@ jobs:
       - name: Submit drive-slo-pass-count
         if: ${{ github.event.inputs.dry_run != 'true' }}
         run: |
-          curl -sf -X POST \
+          curl -f -X POST \
             "${{ env.CORTEX_API_URL }}/api/v1/eng-intel/custom-metrics/drive-slo-pass-count/entity/${{ matrix.service.tag }}" \
             -H "Authorization: Bearer ${{ secrets.CORTEX_API_TOKEN }}" \
             -H "Content-Type: application/json" \
@@ -57,7 +57,7 @@ jobs:
       - name: Submit drive-slo-fail-count
         if: ${{ github.event.inputs.dry_run != 'true' }}
         run: |
-          curl -sf -X POST \
+          curl -f -X POST \
             "${{ env.CORTEX_API_URL }}/api/v1/eng-intel/custom-metrics/drive-slo-fail-count/entity/${{ matrix.service.tag }}" \
             -H "Authorization: Bearer ${{ secrets.CORTEX_API_TOKEN }}" \
             -H "Content-Type: application/json" \
@@ -67,7 +67,7 @@ jobs:
       - name: Submit drive-slo-pass-rate
         if: ${{ github.event.inputs.dry_run != 'true' }}
         run: |
-          curl -sf -X POST \
+          curl -f -X POST \
             "${{ env.CORTEX_API_URL }}/api/v1/eng-intel/custom-metrics/drive-slo-pass-rate/entity/${{ matrix.service.tag }}" \
             -H "Authorization: Bearer ${{ secrets.CORTEX_API_TOKEN }}" \
             -H "Content-Type: application/json" \
