@@ -37,6 +37,8 @@ jobs:
           SLO_FAIL_COUNT=$(( RANDOM % 3 ))
           SLO_TOTAL=$(( SLO_PASS_COUNT + SLO_FAIL_COUNT ))
           SLO_PASS_RATE=$(echo "scale=4; $SLO_PASS_COUNT / $SLO_TOTAL" | bc)
+          # Ensure leading zero for decimals < 1 (bc outputs .8000, JSON requires 0.8000)
+          SLO_PASS_RATE=$(echo $SLO_PASS_RATE | sed 's/^\./0./')
 
           echo "pass_count=$SLO_PASS_COUNT"   >> $GITHUB_OUTPUT
           echo "fail_count=$SLO_FAIL_COUNT"   >> $GITHUB_OUTPUT
@@ -47,7 +49,7 @@ jobs:
       - name: Submit drive-slo-pass-count
         if: ${{ github.event.inputs.dry_run != 'true' }}
         run: |
-          curl -f -X POST \
+          curl -sf -X POST \
             "${{ env.CORTEX_API_URL }}/api/v1/eng-intel/custom-metrics/drive-slo-pass-count/entity/${{ matrix.service.tag }}" \
             -H "Authorization: Bearer ${{ secrets.CORTEX_API_TOKEN }}" \
             -H "Content-Type: application/json" \
@@ -57,7 +59,7 @@ jobs:
       - name: Submit drive-slo-fail-count
         if: ${{ github.event.inputs.dry_run != 'true' }}
         run: |
-          curl -f -X POST \
+          curl -sf -X POST \
             "${{ env.CORTEX_API_URL }}/api/v1/eng-intel/custom-metrics/drive-slo-fail-count/entity/${{ matrix.service.tag }}" \
             -H "Authorization: Bearer ${{ secrets.CORTEX_API_TOKEN }}" \
             -H "Content-Type: application/json" \
@@ -67,7 +69,7 @@ jobs:
       - name: Submit drive-slo-pass-rate
         if: ${{ github.event.inputs.dry_run != 'true' }}
         run: |
-          curl -f -X POST \
+          curl -sf -X POST \
             "${{ env.CORTEX_API_URL }}/api/v1/eng-intel/custom-metrics/drive-slo-pass-rate/entity/${{ matrix.service.tag }}" \
             -H "Authorization: Bearer ${{ secrets.CORTEX_API_TOKEN }}" \
             -H "Content-Type: application/json" \
