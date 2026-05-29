@@ -1,0 +1,108 @@
+name: DRIVE - Vulnerability Metrics
+
+on:
+  schedule:
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (print payloads without submitting)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  CORTEX_API_URL: https://api.getcortexapp.com
+
+jobs:
+  submit-vulnerability-metrics:
+    name: Submit Vulnerability Metrics - ${{ matrix.service.tag }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - tag: auth-service
+          - tag: checkout-service
+          - tag: inventory-service
+          - tag: notifications-service
+          - tag: payments-service
+          - tag: profile-service
+      fail-fast: false
+
+    steps:
+      - name: Generate Vulnerability Data
+        id: vuln_data
+        run: |
+          CRITICAL=$(( RANDOM % 4 ))
+          HIGH=$(( RANDOM % 10 ))
+          MEDIUM=$(( RANDOM % 20 ))
+          LOW=$(( RANDOM % 30 ))
+          TOTAL=$(( CRITICAL + HIGH + MEDIUM + LOW ))
+
+          echo "critical=$CRITICAL" >> $GITHUB_OUTPUT
+          echo "high=$HIGH"         >> $GITHUB_OUTPUT
+          echo "medium=$MEDIUM"     >> $GITHUB_OUTPUT
+          echo "low=$LOW"           >> $GITHUB_OUTPUT
+          echo "total=$TOTAL"       >> $GITHUB_OUTPUT
+
+          echo "service=${{ matrix.service.tag }}  crit=$CRITICAL  high=$HIGH  med=$MEDIUM  low=$LOW  total=$TOTAL"
+
+      - name: Submit drive-vuln-critical-count
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          curl -sf -X POST \
+            "${{ env.CORTEX_API_URL }}/api/v1/eng-intel/custom-metrics/drive-vulnerability-critical-count/entity/${{ matrix.service.tag }}" \
+            -H "Authorization: Bearer ${{ secrets.CORTEX_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"value\":${{ steps.vuln_data.outputs.critical }}}"
+          echo "✅ drive-vuln-critical-count => ${{ steps.vuln_data.outputs.critical }}"
+
+      - name: Submit drive-vuln-high-count
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          curl -sf -X POST \
+            "${{ env.CORTEX_API_URL }}/api/v1/eng-intel/custom-metrics/drive-vulnerability-high-count/entity/${{ matrix.service.tag }}" \
+            -H "Authorization: Bearer ${{ secrets.CORTEX_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"value\":${{ steps.vuln_data.outputs.high }}}"
+          echo "✅ drive-vuln-high-count => ${{ steps.vuln_data.outputs.high }}"
+
+      - name: Submit drive-vuln-medium-count
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          curl -sf -X POST \
+            "${{ env.CORTEX_API_URL }}/api/v1/eng-intel/custom-metrics/drive-vulnerability-medium-count/entity/${{ matrix.service.tag }}" \
+            -H "Authorization: Bearer ${{ secrets.CORTEX_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"value\":${{ steps.vuln_data.outputs.medium }}}"
+          echo "✅ drive-vuln-medium-count => ${{ steps.vuln_data.outputs.medium }}"
+
+      - name: Submit drive-vuln-low-count
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          curl -sf -X POST \
+            "${{ env.CORTEX_API_URL }}/api/v1/eng-intel/custom-metrics/drive-vulnerability-low-count/entity/${{ matrix.service.tag }}" \
+            -H "Authorization: Bearer ${{ secrets.CORTEX_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"value\":${{ steps.vuln_data.outputs.low }}}"
+          echo "✅ drive-vuln-low-count => ${{ steps.vuln_data.outputs.low }}"
+
+      - name: Submit drive-vuln-total-count
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          curl -sf -X POST \
+            "${{ env.CORTEX_API_URL }}/api/v1/eng-intel/custom-metrics/drive-vuln-total-count/entity/${{ matrix.service.tag }}" \
+            -H "Authorization: Bearer ${{ secrets.CORTEX_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"value\":${{ steps.vuln_data.outputs.total }}}"
+          echo "✅ drive-vuln-total-count => ${{ steps.vuln_data.outputs.total }}"
+
+      - name: Dry Run Output
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: |
+          echo "=== DRY RUN: ${{ matrix.service.tag }} ==="
+          echo "drive-vulnerability-critical-count = ${{ steps.vuln_data.outputs.critical }}"
+          echo "drive-vulnerability-high-count     = ${{ steps.vuln_data.outputs.high }}"
+          echo "drive-vulnerability-medium-count   = ${{ steps.vuln_data.outputs.medium }}"
+          echo "drive-vulnerability-low-count      = ${{ steps.vuln_data.outputs.low }}"
+          echo "drive-vuln-total-count    = ${{ steps.vuln_data.outputs.total }}"
