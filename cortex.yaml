@@ -1,0 +1,27 @@
+openapi: "3.0.0"
+info:
+  title: DRIVE Framework Repo
+  x-cortex-tag: drive-service
+  x-cortex-type: service
+  x-cortex-description: "Handles payment processing and transaction management"
+  x-cortex-owners:
+    - type: group
+      name: payments-team
+    - type: email
+      email: payments-lead@company.com
+  x-cortex-domain: checkout
+  x-cortex-tier: 1
+  x-cortex-links:
+    - name: Runbook
+      type: runbook
+      url: https://wiki.company.com/payment-service/runbook
+    - name: Dashboard
+      type: dashboard
+      url: https://grafana.company.com/d/payments
+  x-cortex-git:
+    github:
+      repository: cortex-workshops/DRIVE-content
+  x-cortex-custom-metadata:
+    squad: platform
+    cost-center: "CC-4892"
+    regulatory: PCI-DSS
