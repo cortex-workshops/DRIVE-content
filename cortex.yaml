@@ -3,4 +3,4 @@ info:
   title: DRIVE Framework Repo
   x-cortex-tag: drive-service
   x-cortex-type: service
-  x-cortex-description: "DRIVE"
+  x-cortex-description: "DRIVE framework repository with metric generation actions"
